@@ -53,7 +53,7 @@ export default function App() {
       () => {}
     )
     return () => { unsub1(); unsub2(); unsub3(); clearTimeout(timeout) }
-  }, [])
+  }, [user])
 
   const allRecords = Object.values(batches).flatMap(b =>
     b.data ? Object.values(b.data).map(r => ({ ...r, dt: normDate(r.dt) })) : []
