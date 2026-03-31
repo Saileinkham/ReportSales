@@ -2415,7 +2415,7 @@ export default function Report({ records, batches, targets, itemBatches, lightMo
     return true
   }), [allItems, filterShop, filterMode, filterYear, filterMonth, dateFrom, dateTo])
 
-  const itemCategories = useMemo(() => [...new Set(allItems.map(r => r.cat))].filter(Boolean).sort(), [allItems])
+const itemCategories = useMemo(() => [...new Set(allItems.map(r => r.cat))].filter(Boolean).sort(), [allItems])
 
   const saveColMap = (draft) => {
     localStorage.setItem('itemColMap', JSON.stringify(draft))
