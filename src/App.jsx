@@ -30,9 +30,11 @@ export default function App() {
 
   useEffect(() => {
     if (!db) { setLoading(false); setNoConfig(true); return }
+    // Timeout fallback — ถ้า Firebase ไม่ตอบใน 10 วิ ให้โหลดต่อได้เลย
+    const timeout = setTimeout(() => setLoading(false), 10000)
     const unsub1 = onValue(ref(db, 'tx_batches'),
-      snap => { setBatches(snap.val() || {}); setLoading(false) },
-      ()   => setLoading(false)
+      snap => { setBatches(snap.val() || {}); setLoading(false); clearTimeout(timeout) },
+      ()   => { setLoading(false); clearTimeout(timeout) }
     )
     const unsub2 = onValue(ref(db, 'targets'),
       snap => setTargets(snap.val() || {}),
@@ -42,7 +44,7 @@ export default function App() {
       snap => setItemBatches(snap.val() || {}),
       () => {}
     )
-    return () => { unsub1(); unsub2(); unsub3() }
+    return () => { unsub1(); unsub2(); unsub3(); clearTimeout(timeout) }
   }, [])
 
   const allRecords = Object.values(batches).flatMap(b =>

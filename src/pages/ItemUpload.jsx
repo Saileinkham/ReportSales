@@ -147,7 +147,7 @@ export default function ItemUpload({ onUploaded }) {
         อัพโหลดไฟล์ Excel รายการขาย (Item Detail) — ระบบจะเก็บทุกคอลัมน์ตามที่มีในไฟล์
       </p>
 
-      {!records && !done && (
+      {!rows && !done && (
         <div
           style={{ ...S.zone, ...(dragging ? S.zoneHover : {}) }}
           onDragOver={e => { e.preventDefault(); setDragging(true) }}
