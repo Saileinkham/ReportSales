@@ -1,5 +1,6 @@
 import { getApp, getApps, initializeApp } from 'firebase/app'
 import { getDatabase } from 'firebase/database'
+import { getAuth } from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -22,4 +23,9 @@ function getOrInitApp() {
 export const db = (() => {
   if (!hasAllConfig) return null
   try { return getDatabase(getOrInitApp()) } catch { return null }
+})()
+
+export const auth = (() => {
+  if (!hasAllConfig) return null
+  try { return getAuth(getOrInitApp()) } catch { return null }
 })()

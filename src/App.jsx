@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { onValue, ref } from 'firebase/database'
-import { db } from './firebase'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { db, auth } from './firebase'
 import { normDate } from './utils'
 import Upload from './pages/Upload'
 import Batches from './pages/Batches'
@@ -8,6 +9,7 @@ import Report from './pages/Report'
 import Target from './pages/Target'
 import ItemUpload from './pages/ItemUpload'
 import ItemBatches from './pages/ItemBatches'
+import Login from './pages/Login'
 
 const TABS = [
   ['report',         '📊', 'รายงาน'],
@@ -27,9 +29,15 @@ export default function App() {
   const [noConfig, setNoConfig]     = useState(false)
   const [navOpen, setNavOpen]       = useState(false)
   const [lightMode, setLightMode]   = useState(false)
+  const [user, setUser]             = useState(undefined) // undefined = checking, null = not logged in
 
   useEffect(() => {
-    if (!db) { setLoading(false); setNoConfig(true); return }
+    if (!auth) { setUser(null); return }
+    return onAuthStateChanged(auth, u => setUser(u ?? null))
+  }, [])
+
+  useEffect(() => {
+    if (!user || !db) { setLoading(false); if (!db) setNoConfig(true); return }
     // Timeout fallback — ถ้า Firebase ไม่ตอบใน 10 วิ ให้โหลดต่อได้เลย
     const timeout = setTimeout(() => setLoading(false), 10000)
     const unsub1 = onValue(ref(db, 'tx_batches'),
@@ -57,6 +65,9 @@ export default function App() {
   })
 
   const selectTab = k => { setTab(k); setNavOpen(false) }
+
+  if (user === undefined) return null
+  if (!user) return <Login />
 
   const lm = lightMode
   return (
@@ -103,6 +114,17 @@ export default function App() {
           }}
           title={lm ? 'โหมดกลางคืน' : 'โหมดกลางวัน'}
         >{lm ? '🌙' : '☀️'}</button>
+
+        {/* Sign out */}
+        <button
+          onClick={() => signOut(auth)}
+          style={{
+            background: 'transparent', border: '1px solid #374151',
+            color: '#6b7280', borderRadius: 8, padding: '5px 10px',
+            cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+          }}
+          title={user?.email}
+        >ออกจากระบบ</button>
 
         {/* Active tab label */}
         <span style={{ color: '#6b7280', fontSize: 13 }}>
