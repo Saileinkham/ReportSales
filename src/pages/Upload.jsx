@@ -116,12 +116,23 @@ export default function Upload({ onUploaded }) {
       await set(ref(db, `tx_batches/${batchId}/meta`), meta)
 
       // Build all chunks then write in parallel (max 5 concurrent) for speed
+      // Strip sn (in shopMap already) and zero-value fields to minimize Firebase size
+      const slim = records.map(r => {
+        const out = {}
+        for (const [k, v] of Object.entries(r)) {
+          if (k === 'sn') continue           // stored in shopMap meta
+          if (v === 0 || v === '') continue  // skip zeros and empty strings
+          out[k] = v
+        }
+        return out
+      })
+
       const CHUNK = 5000
-      const total = records.length
+      const total = slim.length
       const chunks = []
       for (let i = 0; i < total; i += CHUNK) {
         const chunk = {}
-        for (let j = i; j < Math.min(i + CHUNK, total); j++) chunk[j] = records[j]
+        for (let j = i; j < Math.min(i + CHUNK, total); j++) chunk[j] = slim[j]
         chunks.push(chunk)
       }
       setUploadProgress(`กำลังบันทึก ${total.toLocaleString()} รายการ...`)

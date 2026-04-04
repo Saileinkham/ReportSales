@@ -63,19 +63,15 @@ export const sortPeriods = periods =>
   })
 
 export const COL_MAP = {
-  'Shop Code':    'sc',
-  'Shop Name':    'sn',
-  'EntDate':      'dt',
-  'Mode':         'mo',
-  'Period':       'pd',
-  'Bill Count':   'bc',
-  'Cust Count':   'cc',
-  'Qty':          'qt',
-  'Base Sales':   'bs',
-  'Gross Sales':  'gs',
-  'Discount':     'dc',
-  'Vat':          'vt',
-  'Net Total':    'nt',
+  'Shop Code':      'sc',
+  'Shop Name':      'sn', // kept for shopMap building only, stripped before upload
+  'EntDate':        'dt',
+  'Mode':           'mo',
+  'Period':         'pd',
+  'Bill Count':     'bc',
+  'Cust Count':     'cc',
+  'Base Sales':     'bs',
+  'Discount':       'dc',
   'Service Charge': 'sv',
 }
 
