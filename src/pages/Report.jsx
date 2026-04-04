@@ -143,7 +143,7 @@ function OverviewTab({ records, monthTargets, lightMode }) {
   const totalBS   = records.reduce((s, r) => s + r.bs, 0)
   const totalBills = records.reduce((s, r) => s + r.bc, 0)
   const totalCust = records.reduce((s, r) => s + r.cc, 0)
-  const totalQty  = records.reduce((s, r) => s + r.qt, 0)
+  const totalQty  = records.reduce((s, r) => s + (r.qt || 0), 0)
   const totalDisc = records.reduce((s, r) => s + r.dc, 0)
   const avgBill   = totalBills > 0 ? totalBS / totalBills : 0
 
@@ -298,7 +298,7 @@ function ByShopTab({ records, shopMap }) {
     const bs    = recs.reduce((s, r) => s + r.bs, 0)
     const bills = recs.reduce((s, r) => s + r.bc, 0)
     const cust  = recs.reduce((s, r) => s + r.cc, 0)
-    const qty   = recs.reduce((s, r) => s + r.qt, 0)
+    const qty   = recs.reduce((s, r) => s + (r.qt || 0), 0)
     const disc  = recs.reduce((s, r) => s + r.dc, 0)
     return { sc, name: shopMap[sc] || sc, bs, bills, cust, qty, disc, color: getShopColor(sc, idx) }
   }).sort((a, b) => b.bs - a.bs)
@@ -816,11 +816,11 @@ function DetailsTab({ records, shopMap }) {
                 <td style={{ padding: '8px 12px', color: 'var(--c-muted)', whiteSpace: 'nowrap' }}>{r.pd}</td>
                 <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--c-text2)' }}>{r.bc}</td>
                 <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--c-text2)' }}>{r.cc}</td>
-                <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--c-text2)' }}>{r.qt}</td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--c-text2)' }}>{r.qt || '—'}</td>
                 <td style={{ padding: '8px 12px', textAlign: 'right', color: '#10b981', fontWeight: 600 }}>{fmt(r.bs)}</td>
                 <td style={{ padding: '8px 12px', textAlign: 'right', color: r.dc > 0 ? '#f87171' : '#374151' }}>{fmt(r.dc)}</td>
-                <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--c-muted)' }}>{fmt(r.vt)}</td>
-                <td style={{ padding: '8px 12px', textAlign: 'right', color: '#f59e0b' }}>{fmt(r.nt)}</td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--c-muted)' }}>{r.vt ? fmt(r.vt) : '—'}</td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', color: '#f59e0b' }}>{r.nt ? fmt(r.nt) : '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -987,9 +987,9 @@ function MTDTab({ records, allRecords, targets, monthTargets }) {
       map[ym].bs    += r.bs
       map[ym].bills += r.bc
       map[ym].cust  += r.cc
-      map[ym].qty   += r.qt
+      map[ym].qty   += (r.qt || 0)
       map[ym].disc  += r.dc
-      map[ym].nt    += r.nt
+      map[ym].nt    += (r.nt || 0)
       map[ym].days.add(r.dt)
       if (r.pd) map[ym].periods.add(r.pd)
       if (isPH)      { map[ym].phDays.add(r.dt); map[ym].phBS += r.bs }
