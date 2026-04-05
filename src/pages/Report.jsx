@@ -1315,59 +1315,39 @@ function MTDTab({ records, allRecords, targets, monthTargets }) {
         </div>
       </div>
 
-      {/* ── Target vs Actual ── */}
-      {targets?.[latestYM] && (() => {
-        const tData = targets[latestYM]
-        const pctColor = p => p >= 100 ? '#10b981' : p >= 80 ? '#f59e0b' : '#ef4444'
-        const getTotal = v => typeof v === 'object' ? (v.total || 0) : (v || 0)
-
-        const TargetCard = ({ label, actual, tObj, subRows }) => {
-          const target = getTotal(tObj)
-          const pct    = target > 0 ? actual / target * 100 : 0
-          const col    = pctColor(pct)
-          return (
-            <div style={{ background: 'var(--c-card-inner)', borderRadius: 10, padding: 14 }}>
-              <p style={{ fontSize: 11, color: 'var(--c-muted)', marginBottom: 6 }}>{label}</p>
-              <p style={{ fontSize: 17, fontWeight: 800, color: '#10b981' }}>฿{fmt(actual)}</p>
-              <p style={{ fontSize: 11, color: 'var(--c-muted)', marginTop: 2 }}>เป้า ฿{fmt(target)}</p>
-              <div style={{ background: 'var(--c-surface)', borderRadius: 4, height: 6, marginTop: 8 }}>
-                <div style={{ background: col, height: 6, borderRadius: 4, width: `${Math.min(pct,100)}%`, transition: 'width .4s' }} />
-              </div>
-              <p style={{ fontSize: 14, fontWeight: 800, color: col, marginTop: 6 }}>{pct.toFixed(2)}%</p>
-              {/* Day type breakdown */}
-              {tObj?.wdPerDay !== undefined && (
-                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {[
-                    { label: 'ธรรมดา', perDay: tObj.wdPerDay, days: tObj.wdDays, color: '#38bdf8' },
-                    { label: 'ส-อ',    perDay: tObj.wePerDay, days: tObj.weDays, color: '#fb923c' },
-                    tObj.phDays > 0 && { label: 'นักขัต', perDay: tObj.phPerDay, days: tObj.phDays, color: '#f472b6' },
-                  ].filter(Boolean).map(d => (
-                    <div key={d.label} style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ color: 'var(--c-muted)', minWidth: 44 }}>{d.label}</span>
-                      <span style={{ color: d.color, fontWeight: 700 }}>฿{fmt(d.perDay)}</span>
-                      <span style={{ color: 'var(--c-muted)' }}>× {d.days}วัน</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        }
-
-        const allEntry = tData['all']
-        const shopEntries = Object.entries(tData).filter(([k]) => k !== 'all')
+      {/* ── Daily Sales Chart ── */}
+      {(() => {
+        const [ly, lm] = latestYM.split('-').map(Number)
+        const daysInMonth = new Date(ly, lm, 0).getDate()
+        const dailyMap = {}
+        allRec.filter(r => r.dt.slice(0,7) === latestYM).forEach(r => {
+          const day = +r.dt.slice(8,10)
+          dailyMap[day] = (dailyMap[day] || 0) + (r.bs || 0)
+        })
+        const dailyData = Array.from({ length: daysInMonth }, (_, i) => ({
+          day: i + 1,
+          bs: Math.round(dailyMap[i + 1] || 0),
+        }))
+        const maxD = Math.max(...dailyData.map(d => d.bs), 1)
         return (
-          <div style={{ ...card, border: '1px solid #3b82f630' }}>
-            <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 14, color: '#3b82f6' }}>
-              🎯 เทียบเป้า {latestYM}
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px,1fr))', gap: 12 }}>
-              {allEntry   && <TargetCard label="รวมทุกสาขา" actual={cur.bs} tObj={allEntry} />}
-              {shopEntries.map(([sc, tObj]) => {
-                const shopBS = allRec.filter(r => r.dt.slice(0,7) === latestYM && r.sc === sc).reduce((s,r)=>s+r.bs,0)
-                return <TargetCard key={sc} label={sc} actual={shopBS} tObj={tObj} />
-              })}
-            </div>
+          <div style={card}>
+            <SectionTitle>📈 ยอดขายรายวัน — {MONTH_TH[lm]} {ly + 543}</SectionTitle>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={dailyData} margin={{ top: 30, right: 10, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--c-border)" vertical={false} />
+                <XAxis dataKey="day" tick={{ fill: 'var(--c-muted)', fontSize: 10 }} interval={0} />
+                <YAxis tick={{ fill: 'var(--c-muted)', fontSize: 10 }} tickFormatter={fmtBar} domain={[0, Math.ceil(maxD * 1.3)]} />
+                <Tooltip formatter={v => [`฿${fmt(v)}`, 'ยอดขาย']} contentStyle={tooltip.contentStyle} />
+                <Bar dataKey="bs" name="ยอดขาย" radius={[3,3,0,0]}
+                  fill="#3b82f6"
+                  label={({ x, y, width, value }) => value > 0 ? (
+                    <text x={x + width/2} y={y - 4} textAnchor="middle" fontSize={9} fill="var(--c-muted)">
+                      {fmtBar(value)}
+                    </text>
+                  ) : null}
+                />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         )
       })()}
