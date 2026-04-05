@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react'
-import { onValue, ref } from 'firebase/database'
+import { useState, useEffect, lazy, Suspense } from 'react'
+import { get, ref, onValue } from 'firebase/database'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { normDate } from './utils'
-import Upload from './pages/Upload'
-import Batches from './pages/Batches'
-import Report from './pages/Report'
-import Target from './pages/Target'
-import ItemUpload from './pages/ItemUpload'
-import ItemBatches from './pages/ItemBatches'
 import Login from './pages/Login'
+import Report from './pages/Report'   // keep eager — main page
+
+// Heavy pages: lazy-loaded so xlsx is excluded from initial bundle
+const Upload      = lazy(() => import('./pages/Upload'))
+const Batches     = lazy(() => import('./pages/Batches'))
+const Target      = lazy(() => import('./pages/Target'))
+const ItemUpload  = lazy(() => import('./pages/ItemUpload'))
+const ItemBatches = lazy(() => import('./pages/ItemBatches'))
 
 const TABS = [
   ['report',         '📊', 'รายงาน'],
@@ -20,40 +22,102 @@ const TABS = [
   ['items_batches',  '🗂️', 'จัดการรายการขาย'],
 ]
 
+const PageLoader = () => (
+  <div style={{ textAlign: 'center', padding: '60px 0' }}>
+    <div style={{ fontSize: 28, marginBottom: 8 }}>⏳</div>
+    <p style={{ color: '#6b7280', fontSize: 13 }}>กำลังโหลด...</p>
+  </div>
+)
+
 export default function App() {
   const [tab, setTab]               = useState('report')
-  const [batches, setBatches]       = useState({})
+  const [batches, setBatches]       = useState({})    // { batchId: { meta, data } } — current year only
+  const [batchIndex, setBatchIndex] = useState({})    // { batchId: meta } — all years, lightweight
   const [targets, setTargets]       = useState({})
   const [itemBatches, setItemBatches] = useState({})
   const [loading, setLoading]       = useState(true)
   const [noConfig, setNoConfig]     = useState(false)
   const [navOpen, setNavOpen]       = useState(false)
   const [lightMode, setLightMode]   = useState(false)
-  const [user, setUser]             = useState(undefined) // undefined = checking, null = not logged in
+  const [user, setUser]             = useState(undefined)
+  const [dataYear, setDataYear]     = useState(String(new Date().getFullYear()))
 
+  // Auth listener
   useEffect(() => {
     if (!auth) { setUser(null); return }
     return onAuthStateChanged(auth, u => setUser(u ?? null))
   }, [])
 
+  // Load batch index (meta only — lightweight) + targets + item_batches
   useEffect(() => {
     if (!user || !db) { setLoading(false); if (!db) setNoConfig(true); return }
-    // Timeout fallback — ถ้า Firebase ไม่ตอบใน 10 วิ ให้โหลดต่อได้เลย
+
     const timeout = setTimeout(() => setLoading(false), 10000)
-    const unsub1 = onValue(ref(db, 'tx_batches'),
-      snap => { setBatches(snap.val() || {}); setLoading(false); clearTimeout(timeout) },
-      ()   => { setLoading(false); clearTimeout(timeout) }
+
+    // Batch index: try new lightweight index first, fallback to reading all metas
+    const loadIndex = async () => {
+      try {
+        const snap = await get(ref(db, 'tx_batch_index'))
+        if (snap.exists()) {
+          setBatchIndex(snap.val())
+        } else {
+          // Fallback: load only meta from tx_batches (not data)
+          // Can't do partial reads in RTDB — load full batches for now
+          const fullSnap = await get(ref(db, 'tx_batches'))
+          const full = fullSnap.val() || {}
+          const index = {}
+          Object.entries(full).forEach(([id, b]) => {
+            if (b.meta) index[id] = b.meta
+            // Also keep data in batches for fallback
+          })
+          setBatchIndex(index)
+          setBatches(full)
+          setLoading(false)
+          clearTimeout(timeout)
+          return
+        }
+      } catch { /* silent */ }
+    }
+
+    // Targets (real-time — small dataset)
+    const unsubTargets = onValue(ref(db, 'targets'),
+      snap => setTargets(snap.val() || {}), () => {}
     )
-    const unsub2 = onValue(ref(db, 'targets'),
-      snap => setTargets(snap.val() || {}),
-      () => {}
+
+    // Item batches (real-time — small dataset)
+    const unsubItems = onValue(ref(db, 'item_batches'),
+      snap => setItemBatches(snap.val() || {}), () => {}
     )
-    const unsub3 = onValue(ref(db, 'item_batches'),
-      snap => setItemBatches(snap.val() || {}),
-      () => {}
-    )
-    return () => { unsub1(); unsub2(); unsub3(); clearTimeout(timeout) }
+
+    loadIndex().then(() => clearTimeout(timeout))
+
+    return () => { unsubTargets(); unsubItems(); clearTimeout(timeout) }
   }, [user])
+
+  // Load tx batch DATA for selected year only
+  useEffect(() => {
+    if (!user || !db || Object.keys(batchIndex).length === 0) return
+
+    const relevantIds = Object.entries(batchIndex)
+      .filter(([, meta]) => {
+        const from = (meta.dateFrom || '').slice(0, 4)
+        const to   = (meta.dateTo   || '').slice(0, 4)
+        return from === dataYear || to === dataYear
+      })
+      .map(([id]) => id)
+
+    if (!relevantIds.length) { setLoading(false); return }
+
+    setLoading(true)
+    Promise.all(
+      relevantIds.map(id => get(ref(db, `tx_batches/${id}`)).then(s => [id, s.val()]))
+    ).then(results => {
+      const loaded = {}
+      results.forEach(([id, val]) => { if (val) loaded[id] = val })
+      setBatches(loaded)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [user, batchIndex, dataYear])
 
   const allRecords = Object.values(batches).flatMap(b =>
     b.data ? Object.values(b.data).map(r => ({ ...r, dt: normDate(r.dt) })) : []
@@ -63,6 +127,14 @@ export default function App() {
   Object.values(batches).forEach(b => {
     if (b.meta?.shopMap) { try { Object.assign(shopMap, JSON.parse(b.meta.shopMap)) } catch {} }
   })
+
+  // Available years from batch index
+  const availableYears = [...new Set(
+    Object.values(batchIndex).flatMap(m => [
+      (m.dateFrom || '').slice(0, 4),
+      (m.dateTo   || '').slice(0, 4),
+    ]).filter(Boolean)
+  )].sort().reverse()
 
   const selectTab = k => { setTab(k); setNavOpen(false) }
 
@@ -100,6 +172,20 @@ export default function App() {
             <p style={{ fontSize: 10, color: '#6b7280', lineHeight: 1, marginTop: 2 }}>Transaction Analytics</p>
           </div>
         </div>
+
+        {/* Year selector */}
+        {availableYears.length > 1 && (
+          <select
+            value={dataYear}
+            onChange={e => setDataYear(e.target.value)}
+            style={{
+              background: '#1f2937', border: '1px solid #374151', color: '#f1f5f9',
+              borderRadius: 8, padding: '5px 10px', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer',
+            }}
+          >
+            {availableYears.map(y => <option key={y} value={y}>{+y + 543}</option>)}
+          </select>
+        )}
 
         {/* Light mode toggle */}
         <button
@@ -203,17 +289,17 @@ export default function App() {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '80px 0' }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
-            <p style={{ color: '#6b7280' }}>กำลังโหลดข้อมูลจาก Firebase...</p>
+            <p style={{ color: '#6b7280' }}>กำลังโหลดข้อมูล {dataYear ? `ปี ${+dataYear + 543}` : ''}...</p>
           </div>
         ) : (
-          <>
-            {tab === 'upload'        && <Upload      onUploaded={() => setTab('report')} />}
+          <Suspense fallback={<PageLoader />}>
+            {tab === 'upload'        && <Upload      onUploaded={() => { setTab('report') }} />}
             {tab === 'batches'       && <Batches     batches={batches} />}
             {tab === 'target'        && <Target      targets={targets} allShops={allShops} shopMap={shopMap} />}
             {tab === 'report'        && <Report      records={allRecords} batches={batches} targets={targets} itemBatches={itemBatches} lightMode={lightMode} />}
             {tab === 'items_upload'  && <ItemUpload  onUploaded={() => setTab('items_batches')} />}
             {tab === 'items_batches' && <ItemBatches batches={itemBatches} />}
-          </>
+          </Suspense>
         )}
       </main>
     </div>

@@ -113,7 +113,11 @@ export default function Upload({ onUploaded }) {
         shopMap: JSON.stringify(shopMap),
       }
 
-      await set(ref(db, `tx_batches/${batchId}/meta`), meta)
+      // Write meta to both paths: full path + lightweight index for fast startup
+      await Promise.all([
+        set(ref(db, `tx_batches/${batchId}/meta`), meta),
+        set(ref(db, `tx_batch_index/${batchId}`), meta),
+      ])
 
       // Build all chunks then write in parallel (max 5 concurrent) for speed
       // Strip sn (in shopMap already) and empty strings to minimize Firebase size
