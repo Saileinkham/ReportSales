@@ -174,7 +174,7 @@ export default function App() {
       </aside>
 
       {/* ── Main ── */}
-      <main style={{ padding: '24px 24px 80px', maxWidth: 1400, margin: '0 auto' }}>
+      <main style={{ padding: '24px 24px 80px' }}>
         {noConfig && (
           <div style={{ background: '#78350f22', border: '1px solid #f59e0b44', borderRadius: 12, padding: '16px 20px', marginBottom: 24, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
             <span style={{ fontSize: 20 }}>⚠️</span>
