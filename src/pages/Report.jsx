@@ -1396,15 +1396,11 @@ function MTDTab({ records, allRecords, targets, monthTargets }) {
                       <p style={{ fontSize: 13, fontWeight: 700, color: g.color }}>{g.label}</p>
                       <span style={{ fontSize: 10, color: 'var(--c-muted)', background: 'var(--c-surface)', padding: '2px 6px', borderRadius: 4 }}>{g.from}–{g.to}</span>
                     </div>
-                    <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--c-text)', marginBottom: 4 }}>฿{fmt(Math.round(d.bs))}</p>
-                    <div style={{ background: 'var(--c-surface)', borderRadius: 4, height: 6, marginBottom: 8 }}>
+                    <p style={{ fontSize: 28, fontWeight: 800, color: g.color, marginBottom: 8 }}>{pct.toFixed(1)}%</p>
+                    <div style={{ background: 'var(--c-surface)', borderRadius: 4, height: 6 }}>
                       <div style={{ background: g.color, height: 6, borderRadius: 4, width: `${pct}%`, transition: 'width .4s' }} />
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--c-muted)' }}>
-                      <span style={{ color: g.color, fontWeight: 700 }}>{pct.toFixed(1)}%</span>
-                      <span>{fmt(d.bc)} บิล</span>
-                      <span>AVG ฿{fmt(Math.round(avgBill))}</span>
-                    </div>
+                    <p style={{ fontSize: 12, color: 'var(--c-muted)', marginTop: 6 }}>฿{fmt(Math.round(d.bs))}</p>
                   </div>
                 )
               })}
