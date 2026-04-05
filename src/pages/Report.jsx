@@ -1333,20 +1333,24 @@ function MTDTab({ records, allRecords, targets, monthTargets }) {
           <div style={card}>
             <SectionTitle>📈 ยอดขายรายวัน — {MONTH_TH[lm]} {ly + 543}</SectionTitle>
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={dailyData} margin={{ top: 30, right: 10, left: 10, bottom: 0 }}>
+              <AreaChart data={dailyData} margin={{ top: 20, right: 16, left: 10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="dailyGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--c-border)" vertical={false} />
                 <XAxis dataKey="day" tick={{ fill: 'var(--c-muted)', fontSize: 10 }} interval={0} />
                 <YAxis tick={{ fill: 'var(--c-muted)', fontSize: 10 }} tickFormatter={fmtBar} domain={[0, Math.ceil(maxD * 1.3)]} />
                 <Tooltip formatter={v => [`฿${fmt(v)}`, 'ยอดขาย']} contentStyle={tooltip.contentStyle} />
-                <Bar dataKey="bs" name="ยอดขาย" radius={[3,3,0,0]}
-                  fill="#3b82f6"
-                  label={({ x, y, width, value }) => value > 0 ? (
-                    <text x={x + width/2} y={y - 4} textAnchor="middle" fontSize={9} fill="var(--c-muted)">
-                      {fmtBar(value)}
-                    </text>
-                  ) : null}
+                <Area dataKey="bs" name="ยอดขาย" type="monotone"
+                  stroke="#3b82f6" strokeWidth={2}
+                  fill="url(#dailyGrad)"
+                  dot={{ fill: '#3b82f6', r: 3 }}
+                  activeDot={{ r: 5 }}
                 />
-              </BarChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         )
