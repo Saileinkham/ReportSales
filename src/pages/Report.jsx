@@ -1030,13 +1030,13 @@ function MTDTab({ records, allRecords, targets, monthTargets }) {
   const sumUpto = (ym, uptoDay) => {
     const s = { bs: 0, bills: 0, cust: 0, disc: 0, days: new Set() }
     allRec.filter(r => r.dt.slice(0, 7) === ym && r.dt.slice(8, 10) <= uptoDay)
-      .forEach(r => { s.bs += r.bs; s.bills += r.bc; s.cust += r.cc; s.disc += r.dc; s.days.add(r.dt) })
+      .forEach(r => { s.bs += (r.bs||0); s.bills += (r.bc||0); s.cust += (r.cc||0); s.disc += (r.dc||0); s.days.add(r.dt) })
     return s.days.size > 0 ? s : null
   }
   const sumFull = (ym) => {
     const s = { bs: 0, bills: 0, cust: 0, disc: 0, days: new Set() }
     allRec.filter(r => r.dt.slice(0, 7) === ym)
-      .forEach(r => { s.bs += r.bs; s.bills += r.bc; s.cust += r.cc; s.disc += r.dc; s.days.add(r.dt) })
+      .forEach(r => { s.bs += (r.bs||0); s.bills += (r.bc||0); s.cust += (r.cc||0); s.disc += (r.dc||0); s.days.add(r.dt) })
     return s.days.size > 0 ? s : null
   }
 
@@ -1454,7 +1454,7 @@ function MTDTab({ records, allRecords, targets, monthTargets }) {
         const chCur = {}, chPrev = {}, chYoy = {}
         const addTo = (map, mo, bs, bc, cc) => {
           if (!map[mo]) map[mo] = { bs: 0, bc: 0, cc: 0 }
-          map[mo].bs += bs; map[mo].bc += bc; map[mo].cc += cc
+          map[mo].bs += (bs||0); map[mo].bc += (bc||0); map[mo].cc += (cc||0)
         }
         allRec.forEach(r => {
           const ym = r.dt.slice(0, 7)

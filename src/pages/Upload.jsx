@@ -116,12 +116,12 @@ export default function Upload({ onUploaded }) {
       await set(ref(db, `tx_batches/${batchId}/meta`), meta)
 
       // Build all chunks then write in parallel (max 5 concurrent) for speed
-      // Strip sn (in shopMap already) and zero-value fields to minimize Firebase size
+      // Strip sn (in shopMap already) and empty strings to minimize Firebase size
       const slim = records.map(r => {
         const out = {}
         for (const [k, v] of Object.entries(r)) {
-          if (k === 'sn') continue           // stored in shopMap meta
-          if (v === 0 || v === '') continue  // skip zeros and empty strings
+          if (k === 'sn') continue  // stored in shopMap meta
+          if (v === '') continue    // skip empty strings only (keep 0 — it's a valid value)
           out[k] = v
         }
         return out
