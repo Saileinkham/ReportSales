@@ -1658,89 +1658,107 @@ function ItemDatePivot({ items, categories, records = [] }) {
   const [filterMonth,  setFilterMonth]  = useState('')
   const [dateFrom,     setDateFrom]     = useState('')
   const [dateTo,       setDateTo]       = useState('')
-  const [search,       setSearch]       = useState('')
-  const [compareMode,  setCompareMode]  = useState('qty') // 'qty' | 'bill' | 'cust'
+  const [selectedItems, setSelectedItems] = useState([]) // multi-select items
+  const [itemSearch,   setItemSearch]   = useState('')   // search in dropdown
+  const [dropOpen,     setDropOpen]     = useState(false)
 
   const shops    = useMemo(() => [...new Set(items.map(r => r.sc))].sort(), [items])
   const channels = useMemo(() => [...new Set(items.map(r => r.ch))].filter(Boolean).sort(), [items])
   const years    = useMemo(() => [...new Set(items.map(r => r.dt.slice(0,4)))].sort().reverse(), [items])
-  const itemNames = useMemo(() => [...new Set(items.map(r => r.itm || r.cat).filter(Boolean))].sort(), [items])
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return items.filter(r =>
+
+  // All item names filtered by cat/sc/ch/year/month
+  const availableItems = useMemo(() => {
+    const base = items.filter(r =>
       (!filterCat   || r.cat === filterCat) &&
       (!filterSc    || r.sc  === filterSc) &&
       (!filterCh    || r.ch  === filterCh) &&
       (!filterYear  || r.dt.slice(0,4) === filterYear) &&
       (!filterMonth || r.dt.slice(5,7) === filterMonth) &&
       (!dateFrom    || r.dt >= dateFrom) &&
-      (!dateTo      || r.dt <= dateTo) &&
-      (!q || (r.itm || r.cat || '').toLowerCase().includes(q))
+      (!dateTo      || r.dt <= dateTo)
     )
-  }, [items, filterCat, filterSc, filterCh, filterYear, filterMonth, dateFrom, dateTo, search])
+    return [...new Set(base.map(r => r.itm || r.cat).filter(Boolean))].sort()
+  }, [items, filterCat, filterSc, filterCh, filterYear, filterMonth, dateFrom, dateTo])
+
+  const dropItems = useMemo(() =>
+    availableItems.filter(n => n.toLowerCase().includes(itemSearch.toLowerCase()) && !selectedItems.includes(n))
+  , [availableItems, itemSearch, selectedItems])
+
+  const addItem = (name) => { setSelectedItems(s => [...s, name]); setItemSearch('') }
+  const removeItem = (name) => setSelectedItems(s => s.filter(x => x !== name))
+
+  // Main filtered data — apply all filters including selected items
+  const filtered = useMemo(() => items.filter(r =>
+    (!filterCat   || r.cat === filterCat) &&
+    (!filterSc    || r.sc  === filterSc) &&
+    (!filterCh    || r.ch  === filterCh) &&
+    (!filterYear  || r.dt.slice(0,4) === filterYear) &&
+    (!filterMonth || r.dt.slice(5,7) === filterMonth) &&
+    (!dateFrom    || r.dt >= dateFrom) &&
+    (!dateTo      || r.dt <= dateTo) &&
+    (selectedItems.length === 0 || selectedItems.includes(r.itm || r.cat))
+  ), [items, filterCat, filterSc, filterCh, filterYear, filterMonth, dateFrom, dateTo, selectedItems])
 
   const dates = useMemo(() => [...new Set(filtered.map(r => r.dt))].sort(), [filtered])
 
-  const { rows, dateTotals } = useMemo(() => {
-    const map = {}
-    const totals = {}
+  // Pivot: sc → itm → { byDate, total }
+  const { scRows, scItemRows } = useMemo(() => {
+    // scItemRows: { sc: { itm: { byDate:{dt:qty}, total } } }
+    const scMap = {}
     filtered.forEach(r => {
-      const k = r.sc
-      if (!map[k]) map[k] = { k, total: 0, byDate: {} }
-      map[k].total += r.qty
-      map[k].byDate[r.dt] = (map[k].byDate[r.dt] || 0) + r.qty
-      totals[r.dt] = (totals[r.dt] || 0) + r.qty
+      const sc  = r.sc
+      const itm = r.itm || r.cat || '?'
+      const qty = r.qty || 0
+      if (!scMap[sc]) scMap[sc] = {}
+      if (!scMap[sc][itm]) scMap[sc][itm] = { byDate: {}, total: 0 }
+      scMap[sc][itm].byDate[r.dt] = (scMap[sc][itm].byDate[r.dt] || 0) + qty
+      scMap[sc][itm].total += qty
     })
-    return {
-      rows: Object.values(map).sort((a,b) => b.total - a.total),
-      dateTotals: totals,
-    }
+    const scRows = Object.keys(scMap).sort()
+    return { scRows, scItemRows: scMap }
   }, [filtered])
 
-  // Daily bill/customer counts from transaction records
-  const dailyCounts = useMemo(() => {
-    const counts = {}
+  // Per-branch per-date bill count from tx records
+  const branchDayCounts = useMemo(() => {
+    const counts = {} // key: `${sc}_${dt}`
     records.forEach(r => {
-      if (filterSc    && r.sc  !== filterSc)    return
-      if (filterCh    && r.mo  !== filterCh)    return
-      if (filterYear  && r.dt.slice(0,4) !== filterYear)  return
-      if (filterMonth && r.dt.slice(5,7)  !== filterMonth) return
-      if (dateFrom    && r.dt < dateFrom)  return
-      if (dateTo      && r.dt > dateTo)    return
-      if (!counts[r.dt]) counts[r.dt] = { bills: 0, cust: 0 }
-      counts[r.dt].bills += (r.bc || 0)
-      counts[r.dt].cust  += (r.cc || 0)
+      if (filterSc    && r.sc  !== filterSc)             return
+      if (filterCh    && r.mo  !== filterCh)             return
+      if (filterYear  && r.dt.slice(0,4) !== filterYear) return
+      if (filterMonth && r.dt.slice(5,7) !== filterMonth) return
+      if (dateFrom    && r.dt < dateFrom)                return
+      if (dateTo      && r.dt > dateTo)                  return
+      const key = `${r.sc}_${r.dt}`
+      if (!counts[key]) counts[key] = { bills: 0, cust: 0 }
+      counts[key].bills += (r.bc || 0)
+      counts[key].cust  += (r.cc || 0)
     })
     return counts
   }, [records, filterSc, filterCh, filterYear, filterMonth, dateFrom, dateTo])
 
-  if (!rows.length) return null
-
+  const MONTHS = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
   const selS  = { padding: '5px 10px', background: 'var(--c-card-inner)', border: '1px solid var(--c-border)', borderRadius: 7, color: 'var(--c-text)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer' }
   const thS   = (align = 'right') => ({ padding: '6px 8px', textAlign: align, color: 'var(--c-muted)', fontWeight: 600, borderBottom: '1px solid var(--c-border)', whiteSpace: 'nowrap', fontSize: 11, position: 'sticky', top: 0, background: 'var(--c-card)' })
   const tdS   = (align = 'right', extra = {}) => ({ padding: '5px 8px', textAlign: align, borderBottom: '1px solid var(--c-border)', fontSize: 11, ...extra })
-  const catColor = (cat) => { const idx = (categories || []).indexOf(cat); return ITEM_COLORS[idx >= 0 ? idx % ITEM_COLORS.length : 0] }
   const fmtDt = (dt) => {
     const sameMonth = dates.length > 0 && dates.every(d => d.slice(0,7) === dates[0].slice(0,7))
     return sameMonth ? String(+dt.slice(8)) : `${+dt.slice(8)}/${+dt.slice(5,7)}`
   }
-  const getDenom = (d) => {
-    if (compareMode === 'bill') return dailyCounts[d]?.bills || 0
-    if (compareMode === 'cust') return dailyCounts[d]?.cust  || 0
-    return dateTotals[d] || 0
+
+  const clearFilter = () => {
+    setFilterCat(''); setFilterSc(''); setFilterCh(''); setFilterYear(''); setFilterMonth('')
+    setDateFrom(''); setDateTo(''); setSelectedItems([]); setItemSearch('')
   }
+  const hasFilter = filterCat || filterSc || filterCh || filterYear || filterMonth || dateFrom || dateTo || selectedItems.length > 0
 
-  const MONTHS = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  if (!scRows.length && !filtered.length) return null
 
-  const clearFilter = () => { setFilterCat(''); setFilterSc(''); setFilterCh(''); setFilterYear(''); setFilterMonth(''); setDateFrom(''); setDateTo(''); setSearch('') }
-  const hasFilter = filterCat || filterSc || filterCh || filterYear || filterMonth || dateFrom || dateTo || search
-
-  const cmpLabel = compareMode === 'bill' ? 'Bill' : compareMode === 'cust' ? 'ลูกค้า' : 'Qty รวม'
+  const totalRows = scRows.reduce((s, sc) => s + Object.keys(scItemRows[sc] || {}).length, 0)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Filter bar */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', background: 'var(--c-card)', border: '1px solid var(--c-border)', borderRadius: 10, padding: '10px 14px' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start', background: 'var(--c-card)', border: '1px solid var(--c-border)', borderRadius: 10, padding: '10px 14px' }}>
         <select value={filterYear}  onChange={e => setFilterYear(e.target.value)}  style={selS}>
           <option value="">ทุกปี</option>
           {years.map(y => <option key={y} value={y}>{+y+543}</option>)}
@@ -1761,103 +1779,154 @@ function ItemDatePivot({ items, categories, records = [] }) {
           <option value="">ทุก Category</option>
           {(categories || []).map(c => <option key={c} value={c}>{c}</option>)}
         </select>
-        <input
-          type="text" placeholder="ค้นหารายการ..." value={search}
-          onChange={e => setSearch(e.target.value)}
-          list="item-date-pivot-items"
-          style={{ ...selS, minWidth: 130 }}
-        />
-        <datalist id="item-date-pivot-items">
-          {itemNames.map(n => <option key={n} value={n} />)}
-        </datalist>
-        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ ...selS, colorScheme: 'dark' }} />
-        <span style={{ color: 'var(--c-muted)', fontSize: 12 }}>–</span>
-        <input type="date" value={dateTo}   onChange={e => setDateTo(e.target.value)}   style={{ ...selS, colorScheme: 'dark' }} />
-        {hasFilter && <button onClick={clearFilter} style={{ ...selS, color: '#ef4444', borderColor: '#ef444444' }}>ล้าง</button>}
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--c-muted)' }}>{rows.length} รายการ / {dates.length} วัน</span>
-      </div>
 
-      {/* Table 1: จำนวน */}
-      <div style={card}>
-        <SectionTitle>📅 จำนวน × วันที่</SectionTitle>
-        <div style={{ overflowX: 'auto', maxHeight: 400, overflowY: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', fontSize: 12, minWidth: '100%' }}>
-            <thead>
-              <tr>
-                <th style={{ ...thS('left'), minWidth: 80 }}>สาขา</th>
-                {dates.map(d => <th key={d} style={thS()}>{fmtDt(d)}</th>)}
-                <th style={thS()}>รวม</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid var(--c-border)' }}>
-                  <td style={{ ...tdS('left'), color: 'var(--c-text)', fontWeight: 600 }}>{row.k}</td>
-                  {dates.map(d => (
-                    <td key={d} style={{ ...tdS(), color: row.byDate[d] ? 'var(--c-text)' : 'var(--c-muted)' }}>
-                      {row.byDate[d] || '—'}
-                    </td>
-                  ))}
-                  <td style={{ ...tdS(), color: '#8b5cf6', fontWeight: 700 }}>{fmt(row.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Table 2: % */}
-      <div style={card}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-          <SectionTitle style={{ marginBottom: 0 }}>📊 % × วันที่</SectionTitle>
-          <span style={{ fontSize: 12, color: 'var(--c-muted)' }}>เทียบกับ</span>
-          {['qty','bill','cust'].map(m => (
-            <button key={m} onClick={() => setCompareMode(m)} style={{
-              background: compareMode === m ? '#3b82f6' : 'var(--c-card-inner)',
-              border: `1px solid ${compareMode === m ? '#3b82f6' : 'var(--c-border)'}`,
-              color: compareMode === m ? '#fff' : 'var(--c-muted)',
-              borderRadius: 6, padding: '3px 12px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+        {/* Multi-select item dropdown */}
+        <div style={{ position: 'relative' }}>
+          <div
+            onClick={() => setDropOpen(o => !o)}
+            style={{ ...selS, display: 'flex', alignItems: 'center', gap: 6, minWidth: 160, userSelect: 'none' }}
+          >
+            <span style={{ color: selectedItems.length ? 'var(--c-text)' : 'var(--c-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {selectedItems.length === 0 ? 'เลือกรายการ...' : `${selectedItems.length} รายการ`}
+            </span>
+            <span style={{ color: 'var(--c-muted)', fontSize: 10 }}>▼</span>
+          </div>
+          {dropOpen && (
+            <div style={{
+              position: 'absolute', top: '110%', left: 0, zIndex: 100, minWidth: 260, maxHeight: 300,
+              background: 'var(--c-card)', border: '1px solid var(--c-border)', borderRadius: 8,
+              boxShadow: '0 8px 24px #0008', display: 'flex', flexDirection: 'column',
             }}>
-              {m === 'qty' ? 'Qty รวม' : m === 'bill' ? 'Bill' : 'ลูกค้า'}
-            </button>
-          ))}
+              <div style={{ padding: '8px 8px 4px' }}>
+                <input
+                  autoFocus
+                  type="text" placeholder="ค้นหา..." value={itemSearch}
+                  onChange={e => setItemSearch(e.target.value)}
+                  style={{ width: '100%', padding: '6px 8px', background: 'var(--c-card-inner)', border: '1px solid var(--c-border)', borderRadius: 6, color: 'var(--c-text)', fontSize: 12, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }}
+                />
+              </div>
+              <div style={{ overflowY: 'auto', flex: 1 }}>
+                {dropItems.slice(0, 50).map(n => (
+                  <div key={n} onClick={() => addItem(n)} style={{ padding: '7px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--c-text)', borderBottom: '1px solid var(--c-border)', transition: 'background .1s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--c-card-inner)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >{n}</div>
+                ))}
+                {dropItems.length === 0 && <p style={{ padding: '10px 12px', fontSize: 12, color: 'var(--c-muted)' }}>ไม่พบรายการ</p>}
+              </div>
+              <div style={{ padding: '6px 8px', borderTop: '1px solid var(--c-border)' }}>
+                <button onClick={() => setDropOpen(false)} style={{ width: '100%', padding: '5px', background: 'var(--c-card-inner)', border: '1px solid var(--c-border)', borderRadius: 6, color: 'var(--c-muted)', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>ปิด</button>
+              </div>
+            </div>
+          )}
         </div>
-        <div style={{ overflowX: 'auto', maxHeight: 400, overflowY: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', fontSize: 12, minWidth: '100%' }}>
-            <thead>
-              <tr>
-                <th style={{ ...thS('left'), minWidth: 80 }}>สาขา</th>
-                {dates.map(d => <th key={d} style={thS()}>{fmtDt(d)}</th>)}
-                <th style={thS()}>AVG%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => {
-                const activeDates = dates.filter(d => row.byDate[d])
-                const avgPct = activeDates.length > 0
-                  ? activeDates.reduce((s,d) => { const denom = getDenom(d); return s + (denom > 0 ? row.byDate[d]/denom*100 : 0) }, 0) / activeDates.length
-                  : 0
-                return (
-                  <tr key={i} style={{ borderBottom: '1px solid var(--c-border)' }}>
-                    <td style={{ ...tdS('left'), color: 'var(--c-text)', fontWeight: 600 }}>{row.k}</td>
-                    {dates.map(d => {
-                      const q     = row.byDate[d] || 0
-                      const denom = getDenom(d)
-                      const pct   = denom > 0 ? q/denom*100 : 0
-                      return (
-                        <td key={d} style={{ ...tdS(), color: pct > 10 ? '#f59e0b' : pct > 0 ? 'var(--c-text)' : 'var(--c-muted)', fontSize: 10 }}>
-                          {pct > 0 ? pct.toFixed(1)+'%' : '—'}
-                        </td>
-                      )
-                    })}
-                    <td style={{ ...tdS(), color: '#f59e0b', fontWeight: 700 }}>{avgPct.toFixed(1)}%</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ ...selS, colorScheme: 'dark' }} />
+        <span style={{ color: 'var(--c-muted)', fontSize: 12, alignSelf: 'center' }}>–</span>
+        <input type="date" value={dateTo}   onChange={e => setDateTo(e.target.value)}   style={{ ...selS, colorScheme: 'dark' }} />
+        {hasFilter && <button onClick={clearFilter} style={{ ...selS, color: '#ef4444', borderColor: '#ef444444', alignSelf: 'center' }}>ล้าง</button>}
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--c-muted)', alignSelf: 'center' }}>{totalRows} รายการ / {dates.length} วัน</span>
+
+        {/* Selected item tags */}
+        {selectedItems.length > 0 && (
+          <div style={{ width: '100%', display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+            {selectedItems.map(n => (
+              <span key={n} style={{ background: '#3b82f622', border: '1px solid #3b82f644', borderRadius: 6, padding: '2px 8px', fontSize: 11, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: 4 }}>
+                {n}
+                <span onClick={() => removeItem(n)} style={{ cursor: 'pointer', color: '#ef4444', fontWeight: 700, fontSize: 13, lineHeight: 1 }}>×</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Table 1: qty — สาขา → รายการ */}
+      {scRows.length > 0 && (
+        <div style={card}>
+          <SectionTitle>📅 จำนวน × วันที่</SectionTitle>
+          <div style={{ overflowX: 'auto', maxHeight: 500, overflowY: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: 12, minWidth: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thS('left'), minWidth: 80 }}>สาขา</th>
+                  <th style={{ ...thS('left'), minWidth: 180 }}>รายการ</th>
+                  {dates.map(d => <th key={d} style={thS()}>{fmtDt(d)}</th>)}
+                  <th style={thS()}>รวม</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scRows.map(sc => {
+                  const itmMap = scItemRows[sc]
+                  const itmKeys = Object.keys(itmMap).sort((a,b) => itmMap[b].total - itmMap[a].total)
+                  return itmKeys.map((itm, ii) => (
+                    <tr key={`${sc}_${itm}`} style={{ borderBottom: '1px solid var(--c-border)', background: ii === 0 ? 'var(--c-card-inner)' : 'transparent' }}>
+                      <td style={{ ...tdS('left'), fontWeight: 700, color: '#3b82f6' }}>{ii === 0 ? sc : ''}</td>
+                      <td style={{ ...tdS('left'), color: 'var(--c-text)' }}>{itm}</td>
+                      {dates.map(d => (
+                        <td key={d} style={{ ...tdS(), color: itmMap[itm].byDate[d] ? 'var(--c-text)' : 'var(--c-muted)' }}>
+                          {itmMap[itm].byDate[d] || '—'}
+                        </td>
+                      ))}
+                      <td style={{ ...tdS(), color: '#8b5cf6', fontWeight: 700 }}>{fmt(itmMap[itm].total)}</td>
+                    </tr>
+                  ))
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Table 2: % = qty / bills ของสาขานั้นๆ ตามวันที่ */}
+      {scRows.length > 0 && (
+        <div style={card}>
+          <SectionTitle>📊 % ต่อบิล × วันที่ (qty ÷ บิลสาขา)</SectionTitle>
+          <div style={{ overflowX: 'auto', maxHeight: 500, overflowY: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: 12, minWidth: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thS('left'), minWidth: 80 }}>สาขา</th>
+                  <th style={{ ...thS('left'), minWidth: 180 }}>รายการ</th>
+                  {dates.map(d => <th key={d} style={thS()}>{fmtDt(d)}</th>)}
+                  <th style={thS()}>AVG%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scRows.map(sc => {
+                  const itmMap = scItemRows[sc]
+                  const itmKeys = Object.keys(itmMap).sort((a,b) => itmMap[b].total - itmMap[a].total)
+                  return itmKeys.map((itm, ii) => {
+                    const activeDates = dates.filter(d => itmMap[itm].byDate[d])
+                    const avgPct = activeDates.length > 0
+                      ? activeDates.reduce((s, d) => {
+                          const bills = branchDayCounts[`${sc}_${d}`]?.bills || 0
+                          return s + (bills > 0 ? itmMap[itm].byDate[d] / bills * 100 : 0)
+                        }, 0) / activeDates.length
+                      : 0
+                    return (
+                      <tr key={`${sc}_${itm}`} style={{ borderBottom: '1px solid var(--c-border)', background: ii === 0 ? 'var(--c-card-inner)' : 'transparent' }}>
+                        <td style={{ ...tdS('left'), fontWeight: 700, color: '#3b82f6' }}>{ii === 0 ? sc : ''}</td>
+                        <td style={{ ...tdS('left'), color: 'var(--c-text)' }}>{itm}</td>
+                        {dates.map(d => {
+                          const q     = itmMap[itm].byDate[d] || 0
+                          const bills = branchDayCounts[`${sc}_${d}`]?.bills || 0
+                          const pct   = bills > 0 ? q / bills * 100 : 0
+                          return (
+                            <td key={d} style={{ ...tdS(), color: pct > 20 ? '#f59e0b' : pct > 0 ? 'var(--c-text)' : 'var(--c-muted)', fontSize: 11 }}>
+                              {pct > 0 ? pct.toFixed(1)+'%' : '—'}
+                            </td>
+                          )
+                        })}
+                        <td style={{ ...tdS(), color: '#f59e0b', fontWeight: 700 }}>{avgPct.toFixed(1)}%</td>
+                      </tr>
+                    )
+                  })
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
