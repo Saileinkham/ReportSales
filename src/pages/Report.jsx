@@ -1356,6 +1356,63 @@ function MTDTab({ records, allRecords, targets, monthTargets }) {
         )
       })()}
 
+      {/* ── Hourly Group Sales ── */}
+      {(() => {
+        const GROUPS = [
+          { label: '🌅 เช้า',   key: 'morning',   from: '08:01', to: '14:00', color: '#f59e0b' },
+          { label: '🌇 บ่าย',   key: 'afternoon', from: '14:01', to: '18:00', color: '#3b82f6' },
+          { label: '🌙 เย็น',   key: 'evening',   from: '18:01', to: '23:59', color: '#8b5cf6' },
+        ]
+        const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+        const groupMap = {}
+        GROUPS.forEach(g => { groupMap[g.key] = { bs: 0, bc: 0, cc: 0 } })
+
+        allRec.filter(r => r.dt.slice(0,7) === latestYM && r.pd).forEach(r => {
+          const start = r.pd.split('-')[0]?.trim()
+          if (!start) return
+          const min = toMin(start)
+          const g = GROUPS.find(g => min >= toMin(g.from) && min <= toMin(g.to))
+          if (g) {
+            groupMap[g.key].bs += (r.bs || 0)
+            groupMap[g.key].bc += (r.bc || 0)
+            groupMap[g.key].cc += (r.cc || 0)
+          }
+        })
+
+        const totalBS = GROUPS.reduce((s, g) => s + groupMap[g.key].bs, 0)
+        if (totalBS === 0) return null
+
+        return (
+          <div style={card}>
+            <SectionTitle>⏰ Hourly Sales — {MONTH_TH[+latestYM.split('-')[1]]} {+latestYM.split('-')[0] + 543}</SectionTitle>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              {GROUPS.map(g => {
+                const d = groupMap[g.key]
+                const pct = totalBS > 0 ? d.bs / totalBS * 100 : 0
+                const avgBill = d.bc > 0 ? d.bs / d.bc : 0
+                return (
+                  <div key={g.key} style={{ background: 'var(--c-card-inner)', borderRadius: 12, padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: g.color }}>{g.label}</p>
+                      <span style={{ fontSize: 10, color: 'var(--c-muted)', background: 'var(--c-surface)', padding: '2px 6px', borderRadius: 4 }}>{g.from}–{g.to}</span>
+                    </div>
+                    <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--c-text)', marginBottom: 4 }}>฿{fmt(Math.round(d.bs))}</p>
+                    <div style={{ background: 'var(--c-surface)', borderRadius: 4, height: 6, marginBottom: 8 }}>
+                      <div style={{ background: g.color, height: 6, borderRadius: 4, width: `${pct}%`, transition: 'width .4s' }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--c-muted)' }}>
+                      <span style={{ color: g.color, fontWeight: 700 }}>{pct.toFixed(1)}%</span>
+                      <span>{fmt(d.bc)} บิล</span>
+                      <span>AVG ฿{fmt(Math.round(avgBill))}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ── AVG + Branch side by side ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
       {/* ── MTD AVG KPIs + per-branch ── */}
